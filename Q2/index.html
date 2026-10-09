@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AR Assignment 3 - Q2</title>
+
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+
+<canvas id="renderCanvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("renderCanvas");
+
+const engine = new BABYLON.Engine(canvas, true);
+
+const createScene = async function () {
+
+    const scene = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.FreeCamera(
+        "camera",
+        new BABYLON.Vector3(0, 1.6, -3),
+        scene
+    );
+
+    camera.setTarget(BABYLON.Vector3.Zero());
+
+    const light = new BABYLON.HemisphericLight(
+        "light",
+        new BABYLON.Vector3(0, 1, 0),
+        scene
+    );
+    const result = await BABYLON.SceneLoader.ImportMeshAsync(
+    "",
+    "./assets/",
+    "model.glb",
+    scene
+);
+    const template = result.meshes[0];
+
+    template.scaling = new BABYLON.Vector3(
+        2.0,
+        2.0,
+        2.0
+    );
+
+    template.setEnabled(false);
+    // const model = result.meshes[0];
+
+    // model.position = new BABYLON.Vector3(0, 0, 0);
+    // model.scaling = new BABYLON.Vector3(
+    //     0.1,
+    //     0.1,
+    //     0.1
+    // );
+    const xr = await scene.createDefaultXRExperienceAsync({
+        uiOptions: {
+            sessionMode: "immersive-ar"
+        },
+        optionalFeatures: true
+    });
+    const featureManager = xr.baseExperience.featuresManager;
+
+    const hitTest = featureManager.enableFeature(
+        BABYLON.WebXRHitTest,
+        "latest"
+    );
+
+    let hitResult = null;
+    let lastModel = null;
+    let rightStick = null;
+    let leftStick = null;
+    let startPosition = null;
+    let startRotation = null;
+    let startScale = null;
+    let rightController = null;
+    let controllerHitPoint = null;
+    
+    const controllerRay = new BABYLON.Ray(
+        BABYLON.Vector3.Zero(),
+        BABYLON.Vector3.Forward(),
+        100
+    );
+    let rayLine = null;
+    const marker = BABYLON.MeshBuilder.CreateTorus(
+        "marker",
+        {
+            diameter: 0.15,
+            thickness: 0.01
+        },
+        scene
+    );
+
+    marker.isVisible = false;
+
+
+    hitTest.onHitTestResultObservable.add((results) => {
+
+        if (results.length > 0) {
+
+            hitResult = results[0];
+
+            marker.isVisible = true;
+
+            hitResult.transformationMatrix.decompose(
+                marker.scaling,
+                marker.rotationQuaternion,
+                marker.position
+            );
+
+            controllerHitPoint = marker.position.clone();
+
+        } else {
+
+            hitResult = null;
+            controllerHitPoint = null;
+            marker.isVisible = false;
+
+        }
+
+        });
+
+
+    xr.input.onControllerAddedObservable.add((controller) => {
+
+        controller.onMotionControllerInitObservable.add((motionController) => {
+
+            // Right controller
+            
+            if (motionController.handness === "right") {
+                rightController = controller;
+                const trigger =
+                    motionController.getComponent("xr-standard-trigger");
+
+                rightStick =
+                    motionController.getComponent("xr-standard-thumbstick");
+                const aButton =
+                    motionController.getComponent("a-button");
+
+                const bButton =
+                    motionController.getComponent("b-button");
+                trigger.onButtonStateChangedObservable.add(() => {
+
+                    if (
+                        trigger.changes.pressed &&
+                        trigger.pressed
+                    ) {
+
+                        console.log("Right trigger pressed");
+
+                        if (controllerHitPoint && rightController) {
+
+                            const newModel =
+                                template.clone("model");
+
+                            newModel.setEnabled(true);
+
+                            // let pos = new BABYLON.Vector3();
+                            // let rot = new BABYLON.Quaternion();
+                            // let scale = new BABYLON.Vector3();
+
+                            // hitResult.transformationMatrix.decompose(
+                            //     scale,
+                            //     rot,
+                            //     pos
+                            // );
+
+                            // newModel.position.copyFrom(pos);
+                            // newModel.rotationQuaternion = rot.clone();
+                            newModel.position.copyFrom(controllerHitPoint);
+
+                            newModel.rotationQuaternion =
+                                BABYLON.Quaternion.Identity();
+                            // Make the spawned model larger
+                            newModel.scaling =
+                                new BABYLON.Vector3(
+                                    0.5,
+                                    0.5,
+                                    0.5
+                                );
+
+                            lastModel = newModel;
+                            startPosition = newModel.position.clone();
+                            startRotation = newModel.rotationQuaternion.clone();
+                            startScale = newModel.scaling.clone();
+                        }
+                    }
+                });
+                aButton.onButtonStateChangedObservable.add(() => {
+
+                    if (
+                        aButton.changes.pressed &&
+                        aButton.pressed &&
+                        lastModel
+                    ) {
+                        lastModel.scaling.scaleInPlace(1.1);
+                    }
+
+                });
+                bButton.onButtonStateChangedObservable.add(() => {
+
+                    if (
+                        bButton.changes.pressed &&
+                        bButton.pressed &&
+                        lastModel
+                    ) {
+                        lastModel.scaling.scaleInPlace(0.9);
+                    }
+
+                });
+            }
+
+
+            // Left controller
+            if (motionController.handness === "left") {
+
+                leftStick =
+                    motionController.getComponent("xr-standard-thumbstick");
+
+                const xButton =
+                    motionController.getComponent("x-button");
+
+                xButton.onButtonStateChangedObservable.add(() => {
+
+                    if (
+                        xButton.changes.pressed &&
+                        xButton.pressed &&
+                        lastModel
+                    ) {
+
+                        lastModel.position.copyFrom(startPosition);
+
+                        lastModel.rotationQuaternion.copyFrom(
+                            startRotation
+                        );
+
+                        lastModel.scaling.copyFrom(
+                            startScale
+                        );
+
+                        console.log("Model reset");
+                    }
+
+                });
+
+                }
+
+        });
+
+        });
+    scene.onBeforeRenderObservable.add(() => {
+
+        if (rightController) {
+
+            rightController.getWorldPointerRayToRef(
+                controllerRay
+            );
+
+            const rayEnd =
+                controllerRay.origin.add(
+                    controllerRay.direction.scale(5)
+                );
+
+            if (!rayLine) {
+
+                rayLine = BABYLON.MeshBuilder.CreateLines(
+                    "controllerRay",
+                    {
+                        points: [
+                            controllerRay.origin,
+                            rayEnd
+                        ]
+                    },
+                    scene
+                );
+
+            } else {
+
+                rayLine = BABYLON.MeshBuilder.CreateLines(
+                    "controllerRay",
+                    {
+                        points: [
+                            controllerRay.origin,
+                            rayEnd
+                        ],
+                        instance: rayLine
+                    },
+                    scene
+                );
+
+            }
+
+            }
+
+        if (lastModel && rightStick) {
+
+            const x = rightStick.axes.x;
+            const y = rightStick.axes.y;
+
+            const speed = 0.01;
+
+            lastModel.position.x += x * speed;
+            lastModel.position.z -= y * speed;
+        }
+        if (lastModel && leftStick) {
+
+            const x = leftStick.axes.x;
+
+            const rotateSpeed = 0.03;
+
+            lastModel.rotate(
+                BABYLON.Axis.Y,
+                x * rotateSpeed,
+                BABYLON.Space.WORLD
+            );
+
+            }
+        
+
+
+            const toHit =
+                controllerHitPoint ?
+                controllerHitPoint.subtract(controllerRay.origin) :
+                null;
+
+            if (toHit) {
+
+                const directionToHit = toHit.normalize();
+
+                const alignment =
+                    BABYLON.Vector3.Dot(
+                        controllerRay.direction,
+                        directionToHit
+                    );
+
+                if (alignment < 0.95) {
+                    controllerHitPoint = null;
+                }
+            }
+
+        });
+    return scene;
+};
+
+createScene().then((scene) => {
+
+    engine.runRenderLoop(function () {
+        scene.render();
+    });
+
+});
+
+window.addEventListener("resize", function () {
+    engine.resize();
+});
+
+</script>
+
+</body>
+</html>
